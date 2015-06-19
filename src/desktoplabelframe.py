@@ -205,35 +205,20 @@ class DesktopFrame(TranslucentFrame):
         for i in xrange(5):
             for j in xrange(5):
                 item = DesktopItem("skin/images/bvoice.png", str(0), self)
+                item.z = i * 5 + j
                 item.resize(96, 96)
                 item.move(96 * i, 96 * j)
                 self.items.append(item)
+
+        self.items.reverse()
+        for item in self.items:
+            item.raise_()
 
     def moveCenter(self):
         qr = self.frameGeometry()
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
-
-    def getCheckedRect(self, items):
-        xl = []
-        yl = []
-        xd = {}
-        yd = {}
-
-        for item in items:
-            xl.append(item.x())
-            yl.append(item.y())
-            xd.update({item.x(): item})
-            yd.update({item.y(): item})
-
-        startX = xd[min(xl)].geometry().topLeft().x()
-        startY = yd[min(yl)].geometry().topLeft().y()
-
-        endX = xd[max(xl)].geometry().bottomRight().x()
-        endY = yd[max(yl)].geometry().bottomRight().y()
-
-        return QRect(startX, startY, endX - startX, endY - startY)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat('application/x-dnditemdata'):
@@ -271,16 +256,6 @@ class DesktopFrame(TranslucentFrame):
         self.selectRect = QRect(0, 0, 0, 0)
         super(DesktopFrame, self).focusOutEvent(event)
 
-    # def getItemByPos(self, pos):
-    #     _items = {}
-    #     for item in self.items:
-    #         if item.geometry().contains(pos):
-    #             _items[item.z] = item
-    #     if _items:
-    #         maxZ = max(_items.keys())
-    #         return _items[maxZ]
-    #     return None
-
     def getItemsByPos(self, pos):
         _items = []
         for item in self.items:
@@ -288,59 +263,11 @@ class DesktopFrame(TranslucentFrame):
                 _items.append(item)
         return _items
 
-    def getTopItemByItems(self, items):
-        if len(items) == 1:
-            return items[0]
-        else:
-            _item = items[0]
-            for i in range(len(items) - 1):
-                if items[i + 1].z > _item.z:
-                    _item = items[i + 1]
-            return _item
-
     def getTopItemByPos(self, pos):
-        _items = self.getItemsByPos(pos)
-        if _items:
-            return self.getTopItemByItems(_items)
-        return None
-
-    def getRelativeItemsByItem(self, item):
-        _items = []
-        g = item.geometry()
-        for _item in self.items:
-            if g.intersects(_item.geometry()):
-                _items.append(_item)
-        return _items
-
-    def getRelativeItemsByRect(self, rect):
-        _items = []
-        g = rect
-        for _item in self.items:
-            if g.intersects(_item.geometry()):
-                _items.append(_item)
-        return _items
-
-    def resetZOrder(self, items):
-        print items
-        _items = {}
-        for item in items:
-            _items[item.z] = item
-
-        zKeys = _items.keys()
-        zKeys.sort()
-
-        print zKeys
-
-        for i in range(len(zKeys) - 1):
-            _items[zKeys[i]].stackUnder(_items[zKeys[i + 1]])
-
-    def checkItemByPos(self, pos):
-        for item in self.items:
+        for item in self.items[::-1]:
             if item.geometry().contains(pos):
-                item.setChecked(True)
-                item.raise_()
-            else:
-                item.setChecked(False)
+                return item
+        return None
 
     def checkItemsByRect(self, rect):
         for item in self.items:
@@ -349,9 +276,20 @@ class DesktopFrame(TranslucentFrame):
             else:
                 item.setChecked(False)
 
-    def clearCheckItems(self):
+    def checkRaiseItem(self, item):
+        item.setChecked(True)
+        item.raise_()
+        self.items.remove(item)
+        self.items.append(item)
+
+    def clearAllCheckItems(self):
         for item in self.items:
             item.setChecked(False)
+
+    def clearCheckItems(self, checkedItems):
+        for item in checkedItems:
+            item.setChecked(False)
+        checkedItems = []
 
     def getCheckItems(self):
         checkedItems = []
@@ -363,39 +301,32 @@ class DesktopFrame(TranslucentFrame):
     def getCheckItemsLength(self):
         return len(self.getCheckItems())
 
-    def isPosInCheckItems(self, pos):
-        checkedItems = self.getCheckItems()
-        for item in checkedItems:
-            if item.geometry().contains(pos):
-                return True
-
     def mousePressEvent(self, event):
-        # self.setCursor(Qt.CrossCursor)
         # 鼠标点击事件
         pos = event.pos()
         if event.button() == Qt.LeftButton:
             self.pressedEventPos = pos
             self.selectStartPos = pos
-            itemsUnderPos = self.getItemsByPos(pos)
+            topItem = self.getTopItemByPos(pos)
             checkedItems = self.getCheckItems()
 
-            # print itemsUnderPos, checkedItems
-
-            if not itemsUnderPos:
+            if not topItem:  # 点击空白区域
                 self.setFocus()
-                self.clearCheckItems()
+                self.clearAllCheckItems()
             else:
-                if len(itemsUnderPos) == 1:
-                    if itemsUnderPos[0] in checkedItems:
-                        self.startDrag(pos, itemsUnderPos[0])
-                    else:
-                        self.clearCheckItems()
-                        itemsUnderPos[0].setChecked(True)
-                        itemsUnderPos[0].raise_()
+                if not topItem.isChecked():  # 点击选中的item
+                    self.checkRaiseItem(topItem) # 选中item并置顶
+
+                if topItem not in checkedItems:  # 点击未选中的item
+                    self.clearCheckItems(checkedItems)
+                    checkedItems = [topItem]
+
+                self.startDrag(pos, topItem, checkedItems) # 拖动拖动选中的item
 
         super(DesktopFrame, self).mousePressEvent(event)
 
-    def startDrag(self, pos, itemShoudbyChecked):
+    def startDrag(self, pos, topItem, checkedItems):
+
         oldPos = pos
 
         itemData = QByteArray()
@@ -408,9 +339,7 @@ class DesktopFrame(TranslucentFrame):
 
         F = TranslucentFrame()
         F.resize(self.size())
-        checkedItems = self.getCheckItems()
-        _checkItems = list(item for item in sorted(checkedItems, key=lambda item: item.z))
-        for _item in _checkItems:
+        for _item in checkedItems:
             item = DesktopItem(_item.icon, _item.name, F)
             item.z = _item.z
             item.resize(96, 96)
@@ -427,32 +356,28 @@ class DesktopFrame(TranslucentFrame):
             drag.setHotSpot(self.mapFromGlobal(QCursor.pos()))
 
             action = drag.exec_(Qt.CopyAction | Qt.MoveAction, Qt.CopyAction)
-            if action == Qt.MoveAction:
+            if action == Qt.MoveAction:  #执行拖动操作
+                for item in checkedItems:
+                    newPos = item.pos() + QCursor.pos() - oldPos
+
+                    newRect = item.geometry()
+                    newRect.moveTo(newPos)
+
+                    item.move(newPos)
+                    self.items.remove(item)
+                self.items.extend(checkedItems)
                 for item in self.items:
-                    if item.isChecked():
-                        newPos = item.pos() + QCursor.pos() - oldPos
-
-                        newRect = item.geometry()
-                        newRect.moveTo(newPos)
-
-                        _items = self.getRelativeItemsByRect(newRect)
-                        if item in _items:
-                            _items.remove(item)
-                        if _items:
-                            _topItem = self.getTopItemByItems(_items)
-                            if item.z <= _topItem.z:
-                                item.z = _topItem.z + 1
-                            item.raise_()
-                        item.move(newPos)
+                    item.raise_()
             else:
-                self.clearCheckItems()
-                itemShoudbyChecked.setChecked(True)
+                self.clearCheckItems(checkedItems)
+                self.checkRaiseItem(topItem)
 
     def mouseReleaseEvent(self, event):
         pos = event.pos()
         self.clearFocus()
         self.update()
         self.pressedEventPos = QPoint(0, 0)
+
         super(DesktopFrame, self).mouseReleaseEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -482,19 +407,21 @@ class DesktopFrame(TranslucentFrame):
         super(DesktopFrame, self).paintEvent(event)
 
     def eventFilter(self, obj, event):
-        # if obj is self and event.type() == QEvent.HoverMove:
-        #     item = self.getItemsByPos(event.pos())
-        #     # print item
-        #     if item:
-        #         for _item in self.items:
-        #             if _item is item:
-        #                 _item.setHover(True)
-        #             else:
-        #                 _item.setHover(False)
-        #     else:
-        #         for _item in self.items:
-        #             _item.setHover(False)
-        #     return True
+        if obj is self and event.type() == QEvent.HoverMove:
+            item = self.getTopItemByPos(event.pos())
+            if item and item.isChecked():
+                return True
+            else:
+                if item:
+                    for _item in self.items:
+                        if _item is item:
+                            _item.setHover(True)
+                        else:
+                            _item.setHover(False)
+                else:
+                    for _item in self.items:
+                        _item.setHover(False)
+            return True
         return super(DesktopFrame, self).eventFilter(obj, event)
 
 
