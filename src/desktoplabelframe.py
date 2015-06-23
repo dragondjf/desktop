@@ -32,33 +32,40 @@ class ElideLabel(QLabel):
         super(ElideLabel, self).resizeEvent(event)
 
 
-class DesktopItem(QLabel):
+class DesktopItem(QFrame):
     style = '''
 
-        QLabel {
+        QFrame {
             background-color: rgba(0, 0, 0, 0);
             border: 2px solid rgba(0, 0, 0, 0);
             border-radius: 4px;
             color:white
         }
 
-        QLabel#normal{
+        QFrame#border{
+            background-color: transparent;
+            border: 2px solid rgba(0, 0, 0, 0);
+            border-radius: 4px;
+            color:white
+        }
+
+        QFrame#normal{
             background-color: rgba(0, 0, 0, 0);
             border: 2px solid rgba(0, 0, 0, 0);
             border-radius: 4px;
             color:white
         }
 
-        QLabel#hover{
-            background-color: rgba(0, 0, 0, 20);
-            border: 2px solid rgba(0, 0, 0, 20);
+        QFrame#hover{
+            background-color: rgba(0, 0, 0, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.15);
             border-radius: 4px;
             color:white
         }
 
-        QLabel#checked{
-            background-color: rgba(0, 0, 0, 80);
-            border: 2px solid rgba(100, 100, 100, 80);
+        QFrame#checked{
+            background-color: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.4);
             border-radius: 4px;
             color:white
         }
@@ -71,7 +78,6 @@ class DesktopItem(QLabel):
     '''
     iconChanged = pyqtSignal('QString')
     nameChanged = pyqtSignal('QString')
-    zOrderChanged = pyqtSignal(int)
 
     def __init__(self, icon='', text='', parent=None):
         super(DesktopItem, self).__init__(parent)
@@ -79,13 +85,13 @@ class DesktopItem(QLabel):
         self._name = text
         self._checked = False
         self._hover = False
-        self.z = 0
 
         self.initUI()
         self.initConnect()
 
     def initUI(self):
         self.setObjectName('normal')
+
         self.iconLabel = QLabel(self)
         self.iconLabel.setAttribute(Qt.WA_TranslucentBackground)
         self.iconLabel.setPixmap(QPixmap(self._icon))
@@ -101,7 +107,6 @@ class DesktopItem(QLabel):
 
     def initConnect(self):
         self.iconChanged.connect(self.updateIcon)
-        self.zOrderChanged.connect(self.updateName)
         self.nameChanged.connect(self.updateText)
 
         self.name = self._name
@@ -136,7 +141,6 @@ class DesktopItem(QLabel):
         self._icon = value
         self.iconChanged.emit(value)
 
-
     @pyqtProperty('QString', notify=nameChanged)
     def name(self):
         return self._name
@@ -145,15 +149,6 @@ class DesktopItem(QLabel):
     def name(self, value):
         self._name = value
         self.nameChanged.emit(value)
-
-    @pyqtProperty(int, notify=zOrderChanged)
-    def z(self):
-        return self._z
-
-    @z.setter
-    def z(self, value):
-        self._z = value
-        self.zOrderChanged.emit(value)
 
     def updateName(self, zOrder):
         self.name = str(zOrder)
@@ -164,15 +159,6 @@ class DesktopItem(QLabel):
     def updateIcon(self, icon):
         self.iconLabel.setPixmap(QPixmap(self.icon))
 
-    # def eventFilter(self, obj, event):
-    #     if obj is self and event.type() == QEvent.HoverEnter:
-    #         self.setHover(True)
-    #         return True
-    #     elif obj is self and event.type() == QEvent.HoverLeave:
-    #         self.setHover(False)
-    #         return True
-    #     return super(DesktopItem, self).eventFilter(obj, event)
-
 
 class TranslucentFrame(QFrame):
 
@@ -182,7 +168,6 @@ class TranslucentFrame(QFrame):
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setWindowState(Qt.WindowMaximized)
-        
 
 
 class DesktopFrame(TranslucentFrame):
@@ -196,29 +181,60 @@ class DesktopFrame(TranslucentFrame):
 
         self.isSelectable = True
         self.selectRect = QRect(0, 0, 0, 0)
-        self.selectStartPos = QPoint(0, 0)
-
         self.pressedEventPos = QPoint(0, 0)
 
         self.items = []
+        self.gridRects = []
+
+        self.gridByWidth()
 
         for i in xrange(5):
             for j in xrange(5):
                 item = DesktopItem("skin/images/bvoice.png", str(0), self)
                 item.z = i * 5 + j
-                item.resize(96, 96)
-                item.move(96 * i, 96 * j)
+                item.resize(110, 110)
+
+                rect = self.gridRects[i][j]
+                item.move(rect.topLeft())
                 self.items.append(item)
 
-        self.items.reverse()
-        for item in self.items:
-            item.raise_()
+        print QDesktopWidget().availableGeometry()
+
+        # self.gridByWidth()
 
     def moveCenter(self):
         qr = self.frameGeometry()
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+
+    def gridByWidth(self, gridItemWidth=110, xSpacing=10, ySpacing=10, startX=0, startY=0):
+        availableGeometry = QDesktopWidget().availableGeometry()
+        _desktopWidth = availableGeometry.width()
+        _desktopHeight = availableGeometry.height()
+
+
+        self.column =  _desktopWidth / (gridItemWidth + xSpacing)
+        self.row = _desktopHeight / (gridItemWidth + ySpacing)
+
+
+        self.gridItemWidth = 110
+        self.xSpacing = 1
+        self.ySpacing = 1
+        self.startX = startX
+        self.startY = startY
+
+        x = startX
+        y = startY
+        for i in range(self.column):
+            self.gridRects.append([])
+            for j in range(self.row):
+                rect = QRect(x, y , gridItemWidth, gridItemWidth)
+                self.gridRects[i].append(rect)
+                y = (gridItemWidth + ySpacing) * (j + 1) + startY
+            x = (gridItemWidth + xSpacing) * (i + 1) + startX
+            y = startY
+
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat('application/x-dnditemdata'):
@@ -303,10 +319,10 @@ class DesktopFrame(TranslucentFrame):
 
     def mousePressEvent(self, event):
         # 鼠标点击事件
+        # self.setCursor(Qt.PointingHandCursor)
         pos = event.pos()
         if event.button() == Qt.LeftButton:
             self.pressedEventPos = pos
-            self.selectStartPos = pos
             topItem = self.getTopItemByPos(pos)
             checkedItems = self.getCheckItems()
 
@@ -322,6 +338,11 @@ class DesktopFrame(TranslucentFrame):
                     checkedItems = [topItem]
 
                 self.startDrag(pos, topItem, checkedItems) # 拖动拖动选中的item
+        elif event.button() == Qt.RightButton:
+            self.clearAllCheckItems()
+            topItem = self.getTopItemByPos(pos)
+            if topItem:
+                self.checkRaiseItem(topItem)
 
         super(DesktopFrame, self).mousePressEvent(event)
 
@@ -341,7 +362,6 @@ class DesktopFrame(TranslucentFrame):
         F.resize(self.size())
         for _item in checkedItems:
             item = DesktopItem(_item.icon, _item.name, F)
-            item.z = _item.z
             item.resize(96, 96)
             item.move(_item.pos())
 
@@ -349,7 +369,10 @@ class DesktopFrame(TranslucentFrame):
             self.dragPixmap = F.grab()
 
             drag = QDrag(self)
-            drag.setDragCursor(QPixmap(), Qt.TargetMoveAction)
+            # self.setCursor(Qt.PointingHandCursor)
+            # drag.setDragCursor(QPixmap('1.png'), Qt.TargetMoveAction)
+            # drag.setDragCursor(QPixmap('1.png'), Qt.MoveAction)
+            # self.setCursor(Qt.PointingHandCursor)
 
             drag.setMimeData(mimeData)
             drag.setPixmap(self.dragPixmap)
@@ -363,6 +386,12 @@ class DesktopFrame(TranslucentFrame):
                     newRect = item.geometry()
                     newRect.moveTo(newPos)
 
+                    # if newRect.x() < self.startX - (self.gridItemWidth + self.xSpacing):
+                    #     pass
+                    # elif newRect.y() < self.startY - (self.gridItemWidth + self.ySpacing):
+                    #     pass
+                    # else:
+                    print newRect.x() / (self.gridItemWidth + self.xSpacing), newRect.y() / (self.gridItemWidth + self.ySpacing), '\n'
                     item.move(newPos)
                     self.items.remove(item)
                 self.items.extend(checkedItems)
@@ -382,8 +411,8 @@ class DesktopFrame(TranslucentFrame):
 
     def mouseMoveEvent(self, event):
         if self.isSelectable:
-            x = self.selectStartPos.x()
-            y = self.selectStartPos.y()
+            x = self.pressedEventPos.x()
+            y = self.pressedEventPos.y()
             width = event.pos().x() - x
             height = event.pos().y() - y
             self.selectRect = QRect(x, y, width, height)
@@ -399,11 +428,19 @@ class DesktopFrame(TranslucentFrame):
         super(DesktopFrame, self).keyPressEvent(event)
 
     def paintEvent(self, event):
+        painter = QPainter(self)
+        for column, columnRects in enumerate(self.gridRects):
+            for row, rect in enumerate(columnRects):
+                # _c = 255 * (row + column * self.row) / (self.column * self.row)
+                _c = 200
+                color = QColor(_c, _c, _c, 255)
+                painter.fillRect(rect, color)
+
         if self.isSelectable:
-            painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
             color = QColor(0, 0, 0, 90)
             painter.fillRect(self.selectRect, color)
+
         super(DesktopFrame, self).paintEvent(event)
 
     def eventFilter(self, obj, event):
@@ -422,7 +459,26 @@ class DesktopFrame(TranslucentFrame):
                     for _item in self.items:
                         _item.setHover(False)
             return True
+        # elif obj is self and event.type() == QEvent.DragEnter:
+        #     event.accept()
+            # return False
+          # pass
         return super(DesktopFrame, self).eventFilter(obj, event)
+
+
+# from PyQt5.QtWidgets import QApplication
+# class DApplication(QApplication):
+    
+#     def __init__(self, argv):
+#         super(DApplication, self).__init__(argv)
+
+#         self.installEventFilter(self)
+
+#     def eventFilter(self, obj, event):
+#         # print event
+#         if event.type() == QEvent.DragEnter:
+#             print('hjjjjjjjjj')
+#         return super(DApplication, self).eventFilter(obj, event)
 
 
 

@@ -72,6 +72,7 @@ class DesktopItem(QPushButton):
     def __init__(self, icon='', text='', parent=None):
         super(DesktopItem, self).__init__(parent)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_NoMousePropagation)
         # self.setFocusPolicy(Qt.NoFocus)
         self.setCheckable(True)
 
@@ -314,6 +315,7 @@ class DesktopFrame(TranslucentFrame):
     def keyPressEvent(self, event):
         if (event.key() == Qt.Key_Escape):
             self.close()
+        print event.key()
         super(DesktopFrame, self).keyPressEvent(event)
 
     def paintEvent(self, event):
